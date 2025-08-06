@@ -1263,139 +1263,8 @@
     <script>
         // 全局变量
         let currentDate = new Date();
-        let requests = [];
-        let approvedEvents = [];
-        
-        // API基础URL
-        const API_BASE = window.location.origin;
-        
-        // API函数
-        async function fetchRequests() {
-            try {
-                const response = await fetch(`${API_BASE}/api/requests`);
-                if (!response.ok) throw new Error('网络请求失败');
-                return await response.json();
-            } catch (error) {
-                console.error('获取请求失败:', error);
-                return [];
-            }
-        }
-        
-        async function fetchEvents() {
-            try {
-                const response = await fetch(`${API_BASE}/api/events`);
-                if (!response.ok) throw new Error('网络请求失败');
-                return await response.json();
-            } catch (error) {
-                console.error('获取事件失败:', error);
-                return [];
-            }
-        }
-        
-        async function createRequest(requestData) {
-            try {
-                const response = await fetch(`${API_BASE}/api/requests`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                if (!response.ok) throw new Error('创建请求失败');
-                return await response.json();
-            } catch (error) {
-                console.error('创建请求失败:', error);
-                throw error;
-            }
-        }
-        
-        async function approveRequest(requestId) {
-            try {
-                const response = await fetch(`${API_BASE}/api/approve`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ id: requestId })
-                });
-                if (!response.ok) throw new Error('批准请求失败');
-                return await response.json();
-            } catch (error) {
-                console.error('批准请求失败:', error);
-                throw error;
-            }
-        }
-        
-        async function rejectRequest(requestId) {
-            try {
-                const response = await fetch(`${API_BASE}/api/reject`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ id: requestId })
-                });
-                if (!response.ok) throw new Error('拒绝请求失败');
-                return await response.json();
-            } catch (error) {
-                console.error('拒绝请求失败:', error);
-                throw error;
-            }
-        }
-        
-        async function deleteRequest(requestId, reason = '') {
-            try {
-                const response = await fetch(`${API_BASE}/api/delete`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ id: requestId, reason: reason })
-                });
-                if (!response.ok) throw new Error('删除请求失败');
-                return await response.json();
-            } catch (error) {
-                console.error('删除请求失败:', error);
-                throw error;
-            }
-        }
-        
-        // 初始化数据加载
-        async function initializeData() {
-            try {
-                requests = await fetchRequests();
-                approvedEvents = await fetchEvents();
-                console.log('数据初始化完成');
-            } catch (error) {
-                console.error('数据初始化失败:', error);
-            }
-        }
-        
-        // 定期同步数据
-        function startDataSync() {
-            setInterval(async () => {
-                try {
-                    const newRequests = await fetchRequests();
-                    const newEvents = await fetchEvents();
-                    
-                    // 检查数据是否有变化
-                    if (JSON.stringify(newRequests) !== JSON.stringify(requests) || 
-                        JSON.stringify(newEvents) !== JSON.stringify(approvedEvents)) {
-                        
-                        requests = newRequests;
-                        approvedEvents = newEvents;
-                        
-                        // 刷新界面
-                        loadPendingRequests();
-                        generateCalendar();
-                        
-                        console.log('数据已同步');
-                    }
-                } catch (error) {
-                    console.error('同步失败:', error);
-                }
-            }, 5000); // 每5秒同步一次
-        }
+        let requests = JSON.parse(localStorage.getItem('massRequests') || '[]');
+        let approvedEvents = JSON.parse(localStorage.getItem('approvedEvents') || '[]');
         let selectedImages = [];
         let currentFilter = 'all';
         let currentSuggestion = '';
@@ -2442,16 +2311,9 @@
         }
 
         // 页面初始化
-        document.addEventListener('DOMContentLoaded', async function() {
-            // 初始化数据
-            await initializeData();
-            
-            // 启动数据同步
-            startDataSync();
-            
-            // 生成日历和加载请求
+        document.addEventListener('DOMContentLoaded', function() {
+            // 不再清空本地存储，保留用户数据
             generateCalendar();
-            loadPendingRequests();
             
             // 初始化筛选状态
             setTimeout(() => {
@@ -2633,36 +2495,17 @@
                 requests.push(request);
             });
             
-            // 使用API创建请求
-            try {
-                for (const date of sendDates) {
-                    const requestData = {
-                        title: `${arc} - ${cohort} - ${target}`,
-                        content: formData.get('content'),
-                        date: date,
-                        time: '09:00', // 默认时间
-                        location: formData.get('teamDomain') || 'Online',
-                        contact: formData.get('submitter'),
-                        email: formData.get('email'),
-                        images: selectedImages
-                    };
-                    
-                    await createRequest(requestData);
-                }
-                
-                // 重新加载数据
-                await initializeData();
-                loadPendingRequests();
-                generateCalendar();
-                
-                document.getElementById('submitTime').textContent = new Date().toLocaleString('zh-CN');
-                closeSubmitModal();
-                document.getElementById('successModal').style.display = 'block';
-                
-            } catch (error) {
-                console.error('提交失败:', error);
-                showCustomModal('提交失败', '请求提交失败，请稍后重试。');
-            }
+            localStorage.setItem('massRequests', JSON.stringify(requests));
+            
+            simulateEmailNotification({
+                ...requests[requests.length - sendDates.length],
+                sendDates: sendDates,
+                totalCount: sendDates.length
+            });
+            
+            document.getElementById('submitTime').textContent = new Date().toLocaleString('zh-CN');
+            closeSubmitModal();
+            document.getElementById('successModal').style.display = 'block';
         });
 
         // 占位函数替换为完整实现
@@ -2756,24 +2599,9 @@
                 }
             });
             
-            // 更新本地存储 -> 使用API
-            try {
-                // 批准所有相关请求
-                for (const request of groupRequests) {
-                    if (request.status === 'pending') {
-                        await approveRequest(request.id);
-                    }
-                }
-                
-                // 重新加载数据
-                await initializeData();
-                loadPendingRequests();
-                generateCalendar();
-                
-            } catch (error) {
-                console.error('批准失败:', error);
-                showCustomModal('批准失败', '请求批准失败，请稍后重试。');
-            }
+            // 更新本地存储
+            localStorage.setItem('massRequests', JSON.stringify(requests));
+            localStorage.setItem('approvedEvents', JSON.stringify(approvedEvents));
             
             // 重新加载页面数据
             loadPendingRequests();
@@ -2807,28 +2635,14 @@
                 }
             });
             
-            // 使用API拒绝请求
-            try {
-                for (const request of groupRequests) {
-                    if (request.status === 'pending') {
-                        await rejectRequest(request.id);
-                    }
-                }
-                
-                // 重新加载数据
-                await initializeData();
-                loadPendingRequests();
-                generateCalendar();
-                
-                const message = groupRequests.length > 1 
-                    ? `循环需求已拒绝！共拒绝 ${groupRequests.length} 个发送任务。`
-                    : '需求已拒绝！';
-                showTemporaryMessage(message, 'warning');
-                
-            } catch (error) {
-                console.error('拒绝失败:', error);
-                showCustomModal('拒绝失败', '请求拒绝失败，请稍后重试。');
-            }
+            localStorage.setItem('massRequests', JSON.stringify(requests));
+            loadPendingRequests();
+            generateCalendar(); // 重新生成日历以移除被拒绝的请求
+            
+            const message = groupRequests.length > 1 
+                ? `循环需求已拒绝！共拒绝 ${groupRequests.length} 个发送任务。`
+                : '需求已拒绝！';
+            showTemporaryMessage(message, 'warning');
         }
 
         // 创建图片画廊
@@ -3227,21 +3041,27 @@
             }
             
             // 显示删除原因输入弹窗
-            showDeleteReasonModal(event, async (deleteReason) => {
-                try {
-                    // 使用API删除请求
-                    await deleteRequest(eventId, deleteReason);
-                    
-                    // 重新加载数据
-                    await initializeData();
-                    generateCalendar();
-                    
-                    showTemporaryMessage('✅ 事件已删除', 'success');
-                    
-                } catch (error) {
-                    console.error('删除失败:', error);
-                    showTemporaryMessage('❌ 删除失败，请稍后重试', 'error');
+            showDeleteReasonModal(event, (deleteReason) => {
+                // 执行删除操作
+                const eventIndex = approvedEvents.findIndex(e => e.id === eventId);
+                if (eventIndex !== -1) {
+                    approvedEvents.splice(eventIndex, 1);
+                    localStorage.setItem('approvedEvents', JSON.stringify(approvedEvents));
                 }
+                
+                // 在requests中找到对应的记录并标记为已删除
+                const request = requests.find(r => r.id === eventId);
+                if (request) {
+                    request.status = 'deleted';
+                    request.deleteReason = deleteReason;
+                    request.deleteTime = new Date().toLocaleString('zh-CN');
+                    localStorage.setItem('massRequests', JSON.stringify(requests));
+                }
+                
+                // 重新生成日历
+                generateCalendar();
+                
+                showTemporaryMessage('✅ 事件已删除', 'success');
             });
         }
         
